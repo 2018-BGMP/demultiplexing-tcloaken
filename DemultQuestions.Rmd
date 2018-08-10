@@ -9,6 +9,9 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 ##Part 1
+
+1.
+
 ```{r echo=FALSE}
 library(knitr)
 Reads <- c("read1","index1","index2","read2")
@@ -26,21 +29,9 @@ target = 0.999
 pf = -10*log10(1-target)
 
 ```
-  Lets specify a cut off mean score of whatever score is $`r target*100`$% likely to be correct or $`r (1-target)*100`$% likely to have an error.
   
-  That is $-10 \times log_{10}(1-`r target`) = `r round(pf,2)`$ Phred Score.
-  
-
-
-
-  To get at the number of index reads that have one or more "N"
-        
-        3. $zcat 1294_S1_L008_R2_001.fastq.gz | sed -n 2~4p | grep -c N   3976613
            
-           $zcat 1294_S1_L008_R3_001.fastq.gz | sed -n 2~4p | grep -c N   3328051
-           
-           Thus, 7,304,664 index reads have one or more "N" in them.
-           
+2a.
 
 ##Average Quality by Position Plots:
 ```{r echo=F}
@@ -48,12 +39,29 @@ R1 <- read.delim("~/School/BI622/HW/R1out2", header=FALSE, comment.char="#")
 R2 <- read.delim("~/School/BI622/HW/R2out2", header=FALSE, comment.char="#")
 R3 <- read.delim("~/School/BI622/HW/R3out2", header=FALSE, comment.char="#")
 R4 <- read.delim("~/School/BI622/HW/R4out2", header=FALSE, comment.char="#")
-plot(R1,type="l",xlab = "Position", ylab = "Phred Score", main = "Forward Sequence (Read 1)")
-plot(R2,type="l",xlab = "Position", ylab = "Phred Score", main = "Forward Index (Read 2)")
-plot(R3,type="l",xlab = "Position", ylab = "Phred Score", main = "Reverse Index (Read 3)")
-plot(R4,type="l",xlab = "Position", ylab = "Phred Score", main = "Reverse Sequence (Read 4)")
+plot(R1,type="l",xlab = "Position", ylab = "Phred Score", main = "Forward Sequence (Read 1)",col="orchid")
+plot(R2,type="l",xlab = "Position", ylab = "Phred Score", main = "Forward Index (Read 2)",col="cornflower blue")
+plot(R3,type="l",xlab = "Position", ylab = "Phred Score", main = "Reverse Index (Read 3)",col="cornflower blue")
+plot(R4,type="l",xlab = "Position", ylab = "Phred Score", main = "Reverse Sequence (Read 4)",col="orchid")
 ```
 
+2b.
+
+  Lets specify a cut off mean score of whatever score is $`r target*100`$% likely to be correct or $`r (1-target)*100`$% likely to have an error.
+  
+  That is $-10 \times log_{10}(1-`r target`) = `r round(pf,2)`$ Phred Score.
+  
+
+2c.
+
+  To get at the number of index reads that have one or more "N"
+        
+       $zcat 1294_S1_L008_R2_001.fastq.gz | sed -n 2~4p | grep -c N   3976613
+           
+        $zcat 1294_S1_L008_R3_001.fastq.gz | sed -n 2~4p | grep -c N   3328051
+           
+        Thus, 7,304,664 index reads have one or more "N" in them.
+ 
   
            
 ##Part 2
@@ -72,7 +80,7 @@ The output will be 48 FASTQ files of the forward reads for each of the indexes f
     
   3) Consolidate bins and create FASTQ files for each index / bin *keep* and write FASTQ files
     
-  4) Create text files of the reads that do not meet quality score cutoff and those that are putatively index swapped or have "Ns"
+  4) Create text files of the reads that do not meet quality score cutoff and those that are putative index swapped or have "Ns"
     
 ###  Functions:
         
@@ -81,7 +89,7 @@ The output will be 48 FASTQ files of the forward reads for each of the indexes f
   sample input: "GTAGCGTA"
   returns: "TACGCTAC"
         
-  IndexSwapping - given a R2 and R3 FASTQ index files and a set of indexes, compare R2 and R3 (reverse compliment) sequence lines and either pass or fail for that read. return a success dictionary with the value being the index and the key being the read number, also return lists of reads (the number of the read in the file) that *failed* either by having "N" or by putative swapping.
+  IndexSwapping - given a R2 and R3 FASTQ index files and a set of indexes, compare R2 and R3 (reverse compliment) sequence lines and either pass or fail for that read. If both indexes are in the set of given indexes then bin them into "undetermined".  return a success dictionary with the value being the index and the key being the read number, also return lists of reads (the number of the read in the file) that *failed* either by having "N" or otherwise, and return an undetermined list.
       
   sample input: R3sample, R2sample, {"GTAGCGTA", "CGATCGAT" , "GATCAAGG" , "AACAGCGA" , "TAGCCATG" , "CGGTAATC" , "CTCTGGAT" , "TACCGGAT"}
   sample output: {1,"GTAGCGTA"}, [2,3]
@@ -100,7 +108,7 @@ The output will be 48 FASTQ files of the forward reads for each of the indexes f
     
   Instead of dismissing indexes with "N"s we can make a guess at what it was supposed to be.  An algorithm to accomplish this would be to:
             
-  1) When an N is encountered in an index, make a set of putative indexes by removine the N and replacing with either A,G,T,C.  Thus if an index has one N there would be four different possibilities in the set. If there was two N's there would be 4^2 = 16 possibilities in the set.
+  1) When an N is encountered in an index, make a set of putative indexes by removing the N and replacing with either A,G,T,C.  Thus if an index has one N there would be four different possibilities in the set. If there was two N's there would be 4^2 = 16 possibilities in the set.
             
   2) Find the intersection of this set with the set of known indexes.  If the intersection is just one index then we keep the intersection as the index.
   
@@ -117,7 +125,7 @@ The output will be 48 FASTQ files of the forward reads for each of the indexes f
   returns: {"ACATGACG"}
   
             
-##  Files:
+##  Input Files:
     
   Sample FASTQ read file read (R1sample):
         
@@ -187,5 +195,25 @@ The output will be 48 FASTQ files of the forward reads for each of the indexes f
 
 
 
+## Output Files:
 
+  Given cutoff Phred score of 30 and an Indexes of GTAGCGTA and TCGCTGA, not using Advanced N correction...
+  
+  
+  Sample FASTQ given to Index: GTAGCGTA
+  
+    @K00337:83:HJKJNBBXX:8:1101:1265:1191 1:N:0:1
+        GNCTGGCATTCCCAGAGACATCAGTACCCAGTTGGTTCAGACAGTTCCTCTATTGGTTGACAAGGTCTTCATTTCTAGTGATATCAACACGGTGTCTACAA
+        +
+        A#A-<FJJJ<JJJJJJJJJJJJJJJJJFJJJJFFJJFJJJAJJJJ-AJJJJJJJFFJJJJJJFFA-7<AJJJFFAJJJJJF<F--JJJJJJF-A-F7JJJJ
 
+  Sample mismatched and Undertermined Index text file
+  
+    "Mismatched Indexes"  "Undetermined"
+    2
+    3
+    
+  Sample low quality text file
+  
+    "[blank]"
+    
