@@ -299,8 +299,8 @@ def Demult(index, Ngo,QScore):
 							#update barcode1
 							barcode1 = list(intersection1)[0]
 							
-						else:
-							barcode1 = "A" #"Can't unravel N's in barcode1"
+						#else:
+							 #"Can't unravel N's in barcode1"
 				
 				if Nbar2: #if theres N's
 					Ns2.add(ReadCounter)
@@ -312,8 +312,8 @@ def Demult(index, Ngo,QScore):
 							#update barcode2
 							barcode2 = RevComp(list(intersection2)[0])
 							
-						else:
-							barcode2 = "C" #"Can't unravel N's in barcode2"
+						#else:
+							#"Can't unravel N's in barcode2"
 				#check to see if the index matches
 				if not indexMatching(barcode1,barcode2,index):
 					#  NO MATCH: putative index hopping
