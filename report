@@ -1,0 +1,62 @@
+A10_R1 % reads	3.1232
+A10_R2 % reads	2.8376
+A11_R1 % reads	4.6752
+A11_R2 % reads	4.4736
+A12_R1 % reads	1.0248
+A12_R2 % reads	0.96
+A1_R1 % reads	2.0992
+A1_R2 % reads	2.0184
+A2_R1 % reads	2.5088
+A2_R2 % reads	2.444
+A3_R1 % reads	4.2688
+A3_R2 % reads	4.0944
+A5_R1 % reads	1.496
+A5_R2 % reads	1.4528
+A7_R1 % reads	0.9744
+A7_R2 % reads	0.9264
+A8_R1 % reads	2.2848
+A8_R2 % reads	2.1336
+B10_R1 % reads	2.9712
+B10_R2 % reads	2.8488
+B1_R1 % reads	2.0632
+B1_R2 % reads	1.8192
+B2_R1 % reads	1.9504
+B2_R2 % reads	1.7648
+B3_R1 % reads	9.0592
+B3_R2 % reads	8.3504
+B4_R1 % reads	2.272
+B4_R2 % reads	2.132
+B7_R1 % reads	2.936
+B7_R2 % reads	2.7328
+B8_R1 % reads	1.1504
+B8_R2 % reads	1.048
+B9_R1 % reads	2.3184
+B9_R2 % reads	2.1984
+C10_R1 % reads	11.1208
+C10_R2 % reads	10.22
+C1_R1 % reads	1.8064
+C1_R2 % reads	1.5848
+C2_R1 % reads	1.8616
+C2_R2 % reads	1.7184
+C3_R1 % reads	1.2616
+C3_R2 % reads	1.0816
+C4_R1 % reads	20.3328
+C4_R2 % reads	18.452
+C7_R1 % reads	1.1
+C7_R2 % reads	1.0232
+C9_R1 % reads	2.7888
+C9_R2 % reads	2.5728
+Undetermined_R1 % reads	12.552
+Undetermined_R2 % reads	19.112
+_Min_Hamming_Distance_of_Barcodes	3
+_Ns in R1 barcode	34267
+_Ns in R1 barcode %	27.4136
+_Ns in R2 barcode	23667
+_Ns in R2 barcode %	18.9336
+_Ns_Recovered	30398
+_Putative_Index_hopping	13453
+_Putative_Index_hopping %	10.7624
+_bad_ave_quality_R1	3424
+_bad_ave_quality_R1 %	2.7392
+_bad_ave_quality_R2	15553
+_bad_ave_quality_R2 %	12.4424
