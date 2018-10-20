@@ -14,11 +14,15 @@ Includes N recovery.
 # Import libraries #
 ####################
 
+from contextlib import ExitStack
 import argparse as ap
 #import re
 import gzip
 #import numpy as np
-from itertools import izip
+import time
+
+from collections import OrderedDict
+
 
 #####################
 # Argument Parser   #
@@ -31,7 +35,7 @@ def get_args():
 	,type=str)
 	parser.add_argument("-R3","--Readfile3", help="put the path the FASTQ file after the flag followed by a space for the reverse index read"
 	,type=str)
-	parser.add_argument("-R4","--Readfile4", help="put the path the FASTQ file after the flag followed by a space for the reverse sequence read"
+	parser.add_argument("-R4","--Readreport_file", help="put the path the FASTQ file after the flag followed by a space for the reverse sequence read"
 	,type=str)
 	parser.add_argument("-i","--index", help="put the path the index file after '-i', The index file is list with a name for the barcode followed by a space followed by the barcode followed by a newline char"
 	,type=str)
@@ -50,7 +54,7 @@ args = get_args()
 R1 = args.Readfile1 #forward sequence read
 R2 = args.Readfile2 #forward index
 R3 = args.Readfile3 #reverse index
-R4 = args.Readfile4 #reverse sequence read
+R4 = args.Readreport_file #reverse sequence read
 index = args.index  #index list, example: "A5 ACGGATAC"
 Nreco = args.Nrecovery #number of N's to recover
 phredThres = args.QualityScoreThreshold #theshold phred score
@@ -214,205 +218,193 @@ def Demult(index, Ngo,QScore):
 	the reads will be in "undetermined" based on from either
 	R1 or R4
 	
-	returns 4 dictionaries: quality assessed R1 reads where barcodes R2 and R3 match
-							quality assessed R4 reads where barcodes R2 and R3 match
-							undetermined R1 and R2 reads where either R2 and R3 did not match or average quality score of the read did not exceed threshold
-							report file, csv
+	returns report file, csv
 							
 	"""
 	QSlowerBound = QScore# threshold quality score (strictly greater than)
-	files = {}  	  	 # read 1 
-	files2 = {} 	  	 # read 2
-	files3 = {} 	  	 # undetermined reads 1 and 2
-	file4 = {}  	 	 # report file
-	Ns1 = set() 		 # Read count if an "N" is present in barcode1
-	Ns2 = set()     	 # ""  ""  barcode1
-	NsRecovered = set()  # N's recovery succesfully from barcode1 or barcode2
-	badQual1 = set()     # average quality score below threshold for R1
-	badQual2 = set()	 # ""   ""  R4
-	indexHopping = set() # barcodes do not match, putative index hopping
+	report_file = {}		 # report file
+	Ns1 = 0 		 # Read count if an "N" is present in barcode1
+	Ns2 = 0     	 # ""  ""  barcode1
+	NsRecovered = 0  # N's recovery succesfully from barcode1 or barcode2
+	badQual1 = 0     # average quality score below threshold for R1
+	badQual2 = 0	 # ""   ""  R4
+	indexHopping = 0 # barcodes do not match, putative index hopping
 	EmployNRecovery = (Ngo >= 0) #bool if true, will employ N recovery
 	LNcount     = 0 #line counter
 	ReadCounter = 0 #updated every 4 line counts
+	start = time.time()
 	
 	# instantiate dictionary with strings according to key
 	# and do it for both read 1 and read 2
 	# and two separate undetermined read 1 and read 2
-	for key in index.values():
-		files[key+"_R1"] = ""
-	for key in index.values():
-		files2[key+"_R2"] = ""	
-	countData = {}
-	for key in files:
-		countData[key] = 0
-	for key in files2:
-		countData[key] = 0
-
-	files3["Undetermined_R1"] = ""
-	files3["Undetermined_R2"] = ""
-	countData["Undetermined_R1"] = 0
-	countData["Undetermined_R2"] = 0
-	#open up all the files
-	with gzip.open(R1,"rt") as fR1, gzip.open(R2,"rt") as fR2, gzip.open(R3,"rt") as fR3, gzip.open(R4,"rt") as fR4:
+	with ExitStack() as stack:
+		files_R1 = {filename: gzip.open(filename+"_R1.gz", 'wt') for filename in index.values()}
+		files_R2 = {filename: gzip.open(filename+"_R2.gz", 'wt') for filename in index.values()}
+		undetermined_R1 = gzip.open("undetermined_R1.gz",'wt')
+		undetermined_R2 = gzip.open("undetermined_R2.gz",'wt')
 		
-		#keey track of these variables through the loop to come
-		qualScores1 = ""  #R1
-		qualScores2 = ""  #R4
-		barcode1    = ""  #R1
-		barcode2    = ""  #R4
-		header1     = ""  #R1
-		header2     = ""  #R4
-		message1    = ""  #R1
-		message2    = ""  #R4
-		Seq1        = ""  #R1
-		Seq2        = ""  #R4
-		BarcodesMatch = False #barcodes for this read match bool
-		currentKey  = ""  #current key associated with barcode
+		countData = {}
+		for key in files_R1:
+			countData[key+"_R1"] = 0
+			countData[key+"_R2"] = 0
 		
-		#loop through each line in all the files 
-		for lR1,lR2,lR3,lR4 in izip(fR1,fR2,fR3,fR4): 
+		
+		countData["Undetermined_R1"] = 0
+		countData["Undetermined_R2"] = 0
+		#open up all the files
+		with gzip.open(R1,"rt") as fR1, gzip.open(R2,"rt") as fR2, gzip.open(R3,"rt") as fR3, gzip.open(R4,"rt") as fR4:
 			
-			if LNcount % 4 == 0: #header
-				ReadCounter += 1 #increment read counter
-				#update current headers
-				header1 = lR1.rstrip()
-				header2 = lR4.rstrip()
+			#keey track of these variables through the loop to come
+			qualScores1 = ""  #R1
+			qualScores2 = ""  #R4
+			barcode1    = ""  #R1
+			barcode2    = ""  #R4
+			header1     = ""  #R1
+			header2     = ""  #R4
+			message1    = ""  #R1
+			message2    = ""  #R4
+			Seq1        = ""  #R1
+			Seq2        = ""  #R4
+			BarcodesMatch = False #barcodes for this read match bool
+			currentKey  = ""  #current key associated with barcode
+			
+			#loop through each line in all the files 
+			for lR1,lR2,lR3,lR4 in zip(fR1,fR2,fR3,fR4): 
 				
-				
-			if LNcount % 4 == 1: #sequence
-				#update current sequence
-				Seq1 = lR1
-				Seq2 = lR4
-				#get barcodes
-				barcode1 = lR2.rstrip()
-				barcode2 = lR3.rstrip()
-				#are there "N"s in the barcodes?
-				Nbar1 = ("N" in barcode1) 
-				Nbar2 = ("N" in barcode2)
-				if Nbar1: #if theres N's
-					Ns1.add(ReadCounter)
-					if EmployNRecovery: 
-						
-						# employ recovery
-						intersection1,bool1 = Nrecovery(buildSet(barcode1,Ngo),index,Ngo)
-						if bool1: #if succesful
-							#update barcode1
-							barcode1 = list(intersection1)[0]
-							
-						#else:
-							 #"Can't unravel N's in barcode1"
-				
-				if Nbar2: #if theres N's
-					Ns2.add(ReadCounter)
-					if EmployNRecovery:
-						
-						# employ recovery
-						intersection2,bool2 = Nrecovery(buildSet(RevComp(barcode2),Ngo),index,Ngo)
-						if bool2: #if succesful
-							#update barcode2
-							barcode2 = RevComp(list(intersection2)[0])
-							
-						#else:
-							#"Can't unravel N's in barcode2"
-				#check to see if the index matches
-				if not indexMatching(barcode1,barcode2,index):
-					#  NO MATCH: putative index hopping
-					indexHopping.add(ReadCounter)
-					BarcodesMatch = False
+				if LNcount % 4 == 0: #header
+					ReadCounter += 1 #increment read counter
+					#update current headers
+					header1 = lR1.rstrip()
+					header2 = lR4.rstrip()
 					
-				else:
-					#they MATCH! good stuff
-					BarcodesMatch = True
-					currentKey = index[barcode1]
-					if Nbar1 or Nbar2:
-						#recoverend an N
-						NsRecovered.add(ReadCounter)
-			
-			if LNcount % 4 == 2: #message
-				#update current messages
-				message1 = lR1
-				message2 = lR4
+					
+				if LNcount % 4 == 1: #sequence
+					#update current sequence
+					Seq1 = lR1
+					Seq2 = lR4
+					#get barcodes
+					barcode1 = lR2.rstrip()
+					barcode2 = lR3.rstrip()
+					#are there "N"s in the barcodes?
+					Nbar1 = ("N" in barcode1) 
+					Nbar2 = ("N" in barcode2)
+					if Nbar1: #if theres N's
+						Ns1 += 1
+						if EmployNRecovery: 
+							
+							# employ recovery
+							intersection1,bool1 = Nrecovery(buildSet(barcode1,Ngo),index,Ngo)
+							if bool1: #if succesful
+								#update barcode1
+								barcode1 = list(intersection1)[0]
+								
+							#else: 
+								#"Can't unravel N's in barcode1"
+					
+					if Nbar2: #if theres N's
+						Ns2 += 1
+						if EmployNRecovery:
+							
+							# employ recovery
+							intersection2,bool2 = Nrecovery(buildSet(RevComp(barcode2),Ngo),index,Ngo)
+							if bool2: #if succesful
+								#update barcode2
+								barcode2 = RevComp(list(intersection2)[0])
+								
+							#else :
+								#"Can't unravel N's in barcode2"
+					#check to see if the index matches
+					if not indexMatching(barcode1,barcode2,index):
+						#  NO MATCH: putative index hopping
+						indexHopping += 1
+						BarcodesMatch = False
+						
+					else:
+						#they MATCH! good stuff
+						BarcodesMatch = True
+						currentKey = index[barcode1]
+						if Nbar1 or Nbar2:
+							#recoverend an N
+							NsRecovered += 1
 				
-			if LNcount % 4 == 3: #quality scores
-				qualScores1 = lR1.rstrip() #remove new line char
-				qualScores2 = lR4.rstrip()
-				if not (qualCutOff(qualScores1,QSlowerBound)):
-					#if it did not pass average quality score test
-					#add the read counter to the set of bad quality for
-					#R1
-					badQual1.add(ReadCounter)
-					#doesn't meet quality
-					files3["Undetermined_R1"] += header1+":"+barcode1+"\n"+ Seq1 + message1 + lR1
-					countData["Undetermined_R1"] += 1
-				elif BarcodesMatch:
-					#meets quality, and barcodes match
-					files[currentKey+"_R1"] += header1+":"+barcode1+"\n" + Seq1 + message1 + lR1
-					countData[currentKey+"_R1"] += 1
-				else:
-					#quality scores ok but not matching barcode
-					files3["Undetermined_R1"] += header1+":"+barcode1+"\n" + Seq1 + message1 + lR1
-					countData["Undetermined_R1"] += 1
-				if not (qualCutOff(qualScores2,QSlowerBound)):
-					#similiarly for R4
-					badQual2.add(ReadCounter)
-					files3["Undetermined_R2"] += header2+":"+RevComp(barcode2)+"\n" + Seq2 + message2 + lR4
-					countData["Undetermined_R2"] += 1
-				elif BarcodesMatch:
-					#quality scores ok and matches not
-					files2[currentKey+"_R2"] += header2+":"+barcode1+"\n" + Seq2 + message2 + lR4
-					countData[currentKey+"_R2"] += 1
-				else:
-					#quality scores but not matching barcode
-					files3["Undetermined_R2"] += header2 +":"+RevComp(barcode2)+"\n"+ Seq2 + message2 + lR4
-					countData["Undetermined_R2"] += 1
-			LNcount += 1
-	
-	#count data	
-	#and prepare report file
-	for key,value in countData.items():
-		file4[key+" % reads"] = (float(value)/float(ReadCounter))*100 #percent of total reads
-	file4["_Min_Hamming_Distance_of_Barcodes"] = findHamMin(list(index.keys()))
-	Ns1 = len(list(Ns1))
-	file4["_Ns in R1 barcode"] = Ns1
-	Ns2 = len(list(Ns2))
-	file4["_Ns in R2 barcode"] = Ns2
-	NsRecovered = len(list(NsRecovered))
-	file4["_Ns_Recovered"] = NsRecovered
-	badQ1 = len(list(badQual1))
-	file4["_bad_ave_quality_R1"] = badQ1
-	badQ2 = len(list(badQual2))
-	file4["_bad_ave_quality_R2"] = badQ2
-	indexHopping = len(list(indexHopping))
-	file4["_Putative_Index_hopping"] = indexHopping
-	file4["_Ns in R1 barcode %"] = (float(Ns1)/float(ReadCounter))*100
-	file4["_Ns in R2 barcode %"] = (float(Ns2)/float(ReadCounter))*100	
-	file4["_Putative_Index_hopping %"] = (float(indexHopping)/float(ReadCounter))*100
-	file4["_bad_ave_quality_R1 %"] = (float(badQ1)/float(ReadCounter))*100
-	file4["_bad_ave_quality_R2 %"] = (float(badQ2)/float(ReadCounter))*100
-	return files,files2,files3,file4
+				if LNcount % 4 == 2: #message
+					#update current messages
+					message1 = lR1
+					message2 = lR4
+					
+				if LNcount % 4 == 3: #quality scores
+					qualScores1 = lR1.rstrip() #remove new line char
+					qualScores2 = lR4.rstrip()
+					if not (qualCutOff(qualScores1,QSlowerBound)):
+						#if it did not pass average quality score test
+						#add the read counter to the set of bad quality for
+						#R1
+						badQual1 += 1
+						#doesn't meet quality
+						undetermined_R1.write(header1+":"+barcode1+"\n"+ Seq1 + message1 + lR1)
+						countData["Undetermined_R1"] += 1
+					elif BarcodesMatch:
+						#meets quality, and barcodes match
+						files_R1[currentKey].write(header1+":"+barcode1+"\n" + Seq1 + message1 + lR1)
+						countData[currentKey+"_R1"] += 1
+					else:
+						#quality scores ok but not matching barcode
+						undetermined_R1.write(header1+":"+barcode1+"\n" + Seq1 + message1 + lR1)
+						countData["Undetermined_R1"] += 1
+						
+					if not (qualCutOff(qualScores2,QSlowerBound)):
+						#similiarly for R4
+						badQual2 += 1
+						undetermined_R2.write(header2+":"+RevComp(barcode2)+"\n" + Seq2 + message2 + lR4)
+						countData["Undetermined_R2"] += 1
+					elif BarcodesMatch:
+						#quality scores ok and matches not
+						files_R2[currentKey].write(header2+":"+barcode1+"\n" + Seq2 + message2 + lR4)
+						countData[currentKey+"_R2"] += 1
+					else:
+						#quality scores but not matching barcode
+						undetermined_R2.write(header2 +":"+RevComp(barcode2)+"\n"+ Seq2 + message2 + lR4)
+						countData["Undetermined_R2"] += 1
+				LNcount += 1
+		
+		end = time.time()
+		
+		#count data	
+		#and prepare report file
+		for key,value in countData.items():
+			report_file[key+" % reads"] = (float(value)/float(ReadCounter))*100 #percent of total reads
+		report_file["_Min_Hamming_Distance_of_Barcodes"] = findHamMin(list(index.keys()))
+		
+		report_file["_Ns in R1 barcode"] = Ns1
+		
+		report_file["_Ns in R2 barcode"] = Ns2
+		
+		report_file["_Ns_Recovered"] = NsRecovered
+		
+		report_file["_bad_ave_quality_R1"] = badQual1
+		
+		report_file["_bad_ave_quality_R2"] = badQual2
+		report_file["_Putative_Index_hopping"] = indexHopping
+		report_file["_Ns in R1 barcode %"] = (float(Ns1)/float(ReadCounter))*100
+		report_file["_Ns in R2 barcode %"] = (float(Ns2)/float(ReadCounter))*100	
+		report_file["_Putative_Index_hopping %"] = (float(indexHopping)/float(ReadCounter))*100
+		report_file["_bad_ave_quality_R1 %"] = (float(badQual1)/float(ReadCounter))*100
+		report_file["_bad_ave_quality_R2 %"] = (float(badQual2)/float(ReadCounter))*100
+		report_file["_demultiplexed_time: "] = (end - start)
+	return report_file
 
-def writeFiles(dictionary1,dictionary2,dictionary3,dictionary4):
+def writeReport(dictionary):
 	"""
-	Given four dictionarys of strings and numbers
-	write files, (number of indexes twice + 2)
-	and write a report file in CSV format
+	Given dictionary of strings and numbers
+	write a report file in CSV format
 	return None
 	"""
 	
-	for key,value in dictionary1.items():
-		with gzip.open(key,"wt") as fh:
-			fh.write(value)
-	for key,value in dictionary2.items():
-		with gzip.open(key,"wt") as fh:
-			fh.write(value)
-	for key, value in dictionary3.items():
-		with gzip.open(key,"wt") as fh:
-			fh.write(value)
-	#write report
+
 	string = ""
 	
-	for key in sorted(dictionary4.iterkeys()):
-		string += key + "\t" + str(dictionary4[key]) + "\n"
+	for key in OrderedDict(sorted(dictionary.items())).keys():
+		string += key + "\t" + str(dictionary[key]) + "\n"
 
 	with open("report","w") as fh:
 		fh.write(string)
@@ -437,10 +429,11 @@ def main():
 	"""
 	Index = makeIndex(index) #get Indexes together
 	Ngo = Nrecos(Nreco,Index) #get "N" recovery information
-	fileR1,fileR2,fileUndeterminedR1R2,fileReport = Demult(Index,Ngo,phredThres)
-	writeFiles(fileR1,fileR2,fileUndeterminedR1R2,fileReport)
+	fileReport = Demult(Index,Ngo,phredThres) #call demult
+	writeReport(fileReport)
 	
 ########
 # MAIN #
 ########
+
 main()
